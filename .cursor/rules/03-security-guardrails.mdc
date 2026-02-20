@@ -1,7 +1,7 @@
 ---
 description: Security — auth, input validation, secrets, PII, headers
 globs: ["services/**/*", "apps/**/*"]
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Security Guardrails

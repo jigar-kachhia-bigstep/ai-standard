@@ -1,0 +1,35 @@
+---
+description: Quick reference — the rules that matter most, always in context
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Quick Reference
+
+The 10 rules that prevent the most common mistakes. Full details in the numbered rules.
+
+## Contracts
+
+1. **Error shape** — always `{ data: T, meta: { requestId } }` or `{ error: { code, message, requestId, retryable } }`. No ad-hoc shapes.
+2. **Lists** — cursor-based pagination, default 20, max 100. Never unbounded. Never 404 on empty.
+3. **Communication** — state mutations → async event/queue. Cross-domain → async. Same-domain reads only → sync REST.
+
+## Safety
+
+4. **Every external input** — validated with schema (Zod/equivalent) before touching business logic. Return 422 on failure.
+5. **Every protected route** — `authMiddleware` first, then explicit ownership check on the fetched resource.
+6. **Tenant** — `ctx.tenantId` on every DB query. Never read tenantId from global state.
+7. **Logging** — `correlationId` required on every log. Never log: passwords · tokens · card numbers · SSNs · secrets.
+
+## Quality
+
+8. **New dependency** — ADR entry first. Pin exact version (no `^` or `~` in production). Run `npm audit`.
+9. **Coverage gate** — ≥80% unit per service. Colocate test file next to source.
+10. **If the plan/task is unclear** — STOP and ask. Do not guess. Flag uncertainty as UNCLEAR.
+
+## Agent Reminders
+
+- Read CLAUDE.md before every architectural decision.
+- State your assumptions before writing code.
+- SCOPE EXPANSION (touching files not in the plan) = stop and report, do not proceed.
+- Do not modify `CLAUDE.md`, `AGENTS.md`, or `.cursor/rules/` during WORKER tasks.

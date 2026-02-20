@@ -1,7 +1,7 @@
 ---
 description: Service boundaries, module layers, API contracts
 globs: ["services/**/*", "apps/**/*", "shared/**/*"]
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Architecture Boundaries

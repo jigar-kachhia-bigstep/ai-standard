@@ -2,24 +2,28 @@
 
 > **Reasoning brain.** `.cursor/rules/` enforces. This file explains *why* and *what*.
 > Read this before every architectural decision. Never put enforcement rules here.
+> Keep this file ≤150 lines. Move verbose specs to `docs/` and link.
 
 ---
 
 ## System Identity
 
-| Property          | Value                                              |
+<!-- Fill every field before your first AI-assisted task. Unfilled fields = bad context. -->
+
+| Property         | Value                                              |
 |------------------|----------------------------------------------------|
-| **Project**       | {YOUR_PROJECT_NAME}                               |
-| **Type**          | {B2C / SaaS / Internal / Marketplace}             |
-| **Architecture**  | {Microservices / Modular Monolith / Monolith}     |
-| **Frontend**      | {React / Next.js / Vue / Angular}                 |
-| **Backend**       | {Node.js / Go / .NET / Python}                    |
-| **Database**      | {Postgres / MongoDB / MySQL}                      |
-| **Infra**         | {AWS / GCP / Azure / Kubernetes}                  |
-| **Compliance**    | {PCI / GDPR / HIPAA / None}                       |
-| **Scale**         | {X users/day, Y RPS}                              |
-| **Multi-tenant**  | {Yes / No}                                        |
-| **AI**            | {Yes / No}                                        |
+| **Project**      | {YOUR_PROJECT_NAME}                                |
+| **Type**         | {B2C / SaaS / Internal / Marketplace}              |
+| **Architecture** | {Microservices / Modular Monolith / Monolith}      |
+| **Frontend**     | {React / Next.js / Vue / Angular} + version        |
+| **Backend**      | {Node.js / Go / .NET / Python} + version           |
+| **Package mgr**  | {npm / pnpm / bun / yarn} — used for all services  |
+| **ORM / DB**     | {Prisma / TypeORM / Drizzle} + {Postgres / MongoDB}|
+| **Test runner**  | {Jest / Vitest / Pytest}                           |
+| **Infra**        | {AWS / GCP / Azure / Kubernetes}                   |
+| **Compliance**   | {PCI / GDPR / HIPAA / None}                        |
+| **Multi-tenant** | {Yes / No}                                         |
+| **AI**           | {Yes / No}                                         |
 
 ---
 
@@ -31,26 +35,30 @@
 4. **Observable** — If you can't measure it, you can't operate it.
 5. **Simple** — The minimum complexity that solves the real problem.
 
-**Conflict rule**: When two principles clash, the higher-numbered one yields.
-Example: #5 Simple may yield to #3 Secure — never add auth complexity for its own sake, but never skip auth for simplicity.
+**Conflict rule**: Higher-numbered principle yields. #5 Simple may yield to #3 Secure — never skip auth for simplicity.
+Full principle definitions: [`governance/architecture-principles.md`](governance/architecture-principles.md)
 
 ---
 
 ## Domain Map
 
+See full ownership + cross-domain workflows: [`governance/domain-boundaries.md`](governance/domain-boundaries.md)
+
 ```
 ┌──────────────────────────────────────────────┐
-│                API / BFF Layer               │
-└────────────────┬────────────────┬────────────┘
-                 │                │
-     ┌───────────▼────┐  ┌────────▼───────┐
-     │   Domain A     │  │   Domain B     │
-     │ - service-1    │  │ - service-3    │
-     │ - service-2    │  │ - service-4    │
-     └────────────────┘  └────────────────┘
+│               API / BFF Layer                │
+└────────────────┬─────────────────────────────┘
+                 │
+     ┌───────────▼────────────────────────────┐
+     │  Commerce: cart · order · catalog      │
+     ├────────────────────────────────────────┤
+     │  Financial: payment                    │
+     ├────────────────────────────────────────┤
+     │  Platform: notification                │
+     └────────────────────────────────────────┘
 ```
 
-**Communication rules (canonical — referenced from cursor rules, not repeated):**
+**Communication rules:**
 - **Synchronous**: reads only, latency-sensitive, same-domain
 - **Async (events/queues)**: all state mutations, cross-domain workflows
 - **Never**: direct DB access across service boundaries
@@ -59,100 +67,87 @@ Example: #5 Simple may yield to #3 Secure — never add auth complexity for its 
 
 ## System Contracts
 
-### Error Response (all services must use this shape)
+### Error Response
 
 ```typescript
 // Success
 { data: T, meta?: { requestId: string, pagination?: { nextCursor: string, hasMore: boolean } } }
-
 // Error
 { error: { code: string, message: string, requestId: string, retryable: boolean, details?: unknown } }
 ```
 
-**Standard error codes**: `VALIDATION_ERROR` · `UNAUTHORIZED` · `FORBIDDEN` · `NOT_FOUND` · `CONFLICT` · `RATE_LIMITED` · `INTERNAL_ERROR`
+**Error codes**: `VALIDATION_ERROR` · `UNAUTHORIZED` · `FORBIDDEN` · `NOT_FOUND` · `CONFLICT` · `RATE_LIMITED` · `INTERNAL_ERROR`
 
-### Pagination (all list endpoints)
+### Pagination
+- Cursor-based: `?cursor=&limit=`. Default 20, max 100. Never unbounded.
+- Empty: `{ data: [], meta: { hasMore: false } }` — never 404.
 
-- Strategy: cursor-based (`?cursor=&limit=`)
-- Default limit: 20. Max limit: 100. Never unbounded.
-- Empty result: `{ data: [], meta: { hasMore: false } }` — never 404
-
-### Event Naming & Versioning
-
+### Events
 ```
-{domain}.{aggregate}.{event}.v{n}   →   commerce.order.created.v1
+{domain}.{aggregate}.{event}.v{n}  →  commerce.order.created.v1
 ```
+- Breaking change = new topic version (`.v2`). Both live ≥30 days.
+- Required fields: `eventId` · `tenantId` · `correlationId` · `causationId` · `timestamp` · `version`
+- Consumers deduplicate on `eventId`.
 
-- Breaking schema change = new topic version (`.v2`). Both versions run ≥30 days.
-- All events carry: `eventId` · `tenantId` · `correlationId` · `causationId` · `timestamp` · `version`
-- Consumers deduplicate on `eventId`. See `docs/patterns/` for implementation.
-
-### Tenant Context (multi-tenant projects)
-
-- Source of truth: JWT claim `tenantId` — injected by API gateway as `x-tenant-id` header
-- Must be passed through every function as `ctx.tenantId` — never read from global state
-- Every DB query must filter by `tenantId`. RLS is defense-in-depth, not the primary control.
+### Tenant Context
+- Source of truth: JWT `tenantId` → injected as `x-tenant-id` header by gateway.
+- Pass as `ctx.tenantId` through every function. Never read from global state.
+- Every DB query filters by `tenantId`. RLS is defense-in-depth, not primary control.
 
 ### Logging Levels
 
-| Level  | When to use                                             |
-|--------|---------------------------------------------------------|
-| ERROR  | Unhandled exception, data loss risk, service degraded   |
-| WARN   | Expected failure (validation, 404), perf degradation    |
-| INFO   | Business event (order created, payment processed)       |
-| DEBUG  | Dev/staging only — stripped in production               |
+| Level | When                                                    |
+|-------|---------------------------------------------------------|
+| ERROR | Unhandled exception, data loss risk, service degraded   |
+| WARN  | Expected failure (validation, 404), perf degradation    |
+| INFO  | Business event (order created, payment processed)       |
+| DEBUG | Dev/staging only — stripped in production               |
 
-Required fields on every log: `correlationId`, `severity`, `service`. Add `tenantId`, `userId` when available.
-Never log: passwords, tokens, card numbers, SSNs, secrets (see `.cursor/rules/03`).
+Required fields: `correlationId`, `severity`, `service`. Add `tenantId`, `userId` when available.
+**Never log**: passwords · tokens · card numbers · SSNs · secrets.
 
-### Cache Invalidation
-
-- On mutation: `del(key)` after DB write in same operation. If del fails: log WARN + let TTL expire (accept brief staleness).
-- TTL defaults: user-facing reads 60s · catalog 300s · config 3600s · session = explicit TTL
-- Multi-tenant: all keys prefixed `t:{tenantId}:{resource}:{id}`
+### Cache TTL Defaults
+`user-facing reads: 60s` · `catalog: 300s` · `config: 3600s` · `session: explicit TTL`
+Multi-tenant keys: `t:{tenantId}:{resource}:{id}`
 
 ### Deployment
-
 ```
 branch → CI (lint + test + security) → staging (auto) → manual approval → canary 5% → 25% → 100%
 ```
-
-Auto-rollback triggers: error rate >1% for 5 min · p99 latency >2× baseline for 5 min
+Auto-rollback: error rate >1% for 5 min · p99 latency >2× baseline for 5 min.
 
 ---
 
 ## Service → Data Store Map
 
-| Service      | DB           | Cache  | Reason         |
-|-------------|-------------|--------|----------------|
-| {service-1} | {db-type}   | Redis  | {reason}       |
-| {service-2} | {db-type}   | —      | {reason}       |
+<!-- Add a row per service as you build. -->
 
----
-
-## Team Ownership
-
-| Team     | Services              | On-Call  |
-|---------|-----------------------|----------|
-| {team}  | {service-1, svc-2}   | {Yes/No} |
+| Service              | DB       | Cache | Reason         |
+|---------------------|----------|-------|----------------|
+| order-service        | Postgres | Redis | transactional  |
+| catalog-service      | Postgres | Redis | high read rate |
+| payment-service      | Postgres | —     | consistency    |
+| cart-service         | Redis    | —     | ephemeral      |
+| notification-service | Postgres | —     | audit trail    |
 
 ---
 
 ## Compounding Index
 
 ### Patterns (`docs/patterns/`)
-| ID      | Name               | Status |
-|---------|--------------------|--------|
-| PAT-001 | {pattern name}     | Draft  |
+| ID      | Name | Status |
+|---------|------|--------|
+| *(none yet — added by Compound Agent after each feature)* | | |
 
 ### Decisions (`governance/decision-records/`)
-| ID      | Title              | Status   |
-|---------|--------------------|----------|
-| ADR-001 | {decision title}   | Proposed |
+| ID      | Title | Status |
+|---------|-------|--------|
+| *(none yet — added by Compound Agent after each feature)* | | |
 
 ---
 
-## Anti-Patterns (append after each review cycle)
+## Anti-Patterns
 
 1. **Shared DB across services** — creates a distributed monolith.
 2. **God events** — entire entity state in one event instead of meaningful deltas.

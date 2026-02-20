@@ -2,14 +2,15 @@
   "rules": {
     "enabled": true,
     "rulesDirectory": ".cursor/rules",
-    "alwaysApply": ["01-coding-standards.mdc"]
+    "alwaysApply": ["00-quick-reference.mdc", "01-coding-standards.mdc"]
   },
   "ai": {
     "contextFiles": [
       "CLAUDE.md",
-      "AGENTS.md"
+      "AGENTS.md",
+      "governance/domain-boundaries.md"
     ],
-    "alwaysInclude": ["CLAUDE.md"]
+    "alwaysInclude": ["CLAUDE.md", "AGENTS.md"]
   },
   "ignore": [
     "node_modules",

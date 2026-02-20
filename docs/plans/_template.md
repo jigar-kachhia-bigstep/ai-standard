@@ -1,9 +1,11 @@
 # Plan: {FEAT-ID} — {Feature Name}
 
-**Status**: Draft | Approved
+**Status**: Draft | Approved  ← Human sets this manually after reviewing the plan
+**Complexity**: S | M | L | XL — {one sentence justification}
 **Team / Ticket**: {team} / {link}
 
 > Get Approved status before writing any code.
+> Approved status does not trigger any automation — it is a signal to the team that this plan is safe to implement.
 
 ---
 
@@ -28,6 +30,7 @@
 
 ```sql
 -- migration (must use CONCURRENTLY for indexes)
+
 -- rollback:
 ```
 
@@ -53,21 +56,37 @@ Errors:   {CODE: description}
 
 ---
 
+## Task Decomposition
+
+Break into atomic WORKER tasks — each task = one PR, one reviewable unit.
+
+| # | Task | Service | Depends on |
+|---|------|---------|-----------|
+| 1 | {create DB migration + rollback script} | {service} | — |
+| 2 | {add domain entity + unit tests} | {service} | 1 |
+| 3 | {add use case + unit tests} | {service} | 2 |
+| 4 | {add HTTP handler + integration tests} | {service} | 3 |
+| 5 | {emit / consume event + idempotency} | {service} | 3 |
+
+---
+
 ## Testing Strategy
 
-| Type        | What's covered                     |
-|------------|-----------------------------------|
-| Unit        | {use cases, domain logic}          |
-| Integration | {endpoints, DB, event handlers}    |
+| Type        | What's covered                      |
+|------------|-------------------------------------|
+| Unit        | {use cases, domain logic}           |
+| Integration | {endpoints, DB, event handlers}     |
 | E2E         | {critical user flows if applicable} |
 
 ---
 
 ## Security & Compliance
 
-- [ ] All new inputs validated
-- [ ] Auth checks on new endpoints
+- [ ] All new inputs validated at external boundary
+- [ ] Auth checks on all new endpoints
+- [ ] Ownership check after every resource fetch
 - [ ] No PII in logs
+- [ ] Multi-tenant: tenantId on all new DB queries
 - [ ] {compliance-specific check}
 
 ---
@@ -83,15 +102,19 @@ Errors:   {CODE: description}
 
 ## Open Questions
 
-| # | Question | Owner | Due |
-|---|---------|-------|-----|
-| 1 | {?}     | {name}| {date} |
+| # | Question | Owner | Due | Answer |
+|---|---------|-------|-----|--------|
+| 1 | {?}     | {name}| {date} | — |
+
+*Unresolved questions with no answer by approval date block approval.*
 
 ---
 
 ## Definition of Done
 
+- [ ] All task decomposition PRs merged
 - [ ] Tests passing, coverage ≥80%
 - [ ] Reviewer verdict: APPROVED
 - [ ] Staged and smoke-tested
 - [ ] Runbook updated if new ops procedures needed
+- [ ] Compound Agent has run (patterns + ADRs extracted)

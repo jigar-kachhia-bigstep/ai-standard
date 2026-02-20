@@ -1,7 +1,7 @@
 ---
 description: Testing structure, coverage gates, factory pattern
 globs: ["services/**/*", "apps/**/*", "shared/**/*"]
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Testing Standards

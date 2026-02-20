@@ -1,7 +1,7 @@
 ---
 description: Performance — queries, caching, async, connections
 globs: ["services/**/*", "apps/**/*"]
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Performance Rules
