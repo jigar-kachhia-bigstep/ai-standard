@@ -1,0 +1,62 @@
+---
+description: Service boundaries, module layers, API contracts
+globs: ["services/**/*", "apps/**/*", "shared/**/*"]
+alwaysApply: true
+---
+
+# Architecture Boundaries
+
+## Service Isolation
+
+```typescript
+// ❌ another service's DB or src/
+import { OrderEntity } from '../../order-service/src/entities/order.entity';
+
+// ✅ shared/ for shared types, API client for cross-service reads
+import { OrderDto } from '@shared/domain/order.types';
+const order = await orderServiceClient.getOrder(orderId);
+```
+
+**Communication** (canonical definition in CLAUDE.md):
+- Reads → synchronous REST/gRPC
+- Writes / cross-domain → async event/queue
+- Never → direct DB access or `services/x` imports from `services/y`
+
+## Layer Dependency Direction
+
+```
+Controllers → Use Cases → Domain ← Infrastructure
+```
+Domain defines interfaces. Infrastructure implements them. Domain never imports infrastructure.
+
+```typescript
+// ❌ domain importing DB client
+import { PrismaClient } from '@prisma/client'; // in domain/
+
+// ✅ domain defines contract; infra implements it
+export interface OrderRepository { save(o: Order): Promise<void>; }
+```
+
+## API Contracts
+
+- Routes: `GET|POST|PUT|PATCH|DELETE /v{n}/{plural-resource}`
+- Response shape: defined in CLAUDE.md System Contracts — use it everywhere
+- `POST` / `PUT`: require `Idempotency-Key` header. Return 400 if missing, 200 (original result) if duplicate key seen.
+- Versioning: URL path (`/v1/`, `/v2/`). Old version supported ≥90 days after new version ships.
+- Breaking change: new path version. Non-breaking (add optional field): no version bump.
+
+## Event Contracts
+
+- Topic naming + envelope fields: defined in CLAUDE.md System Contracts
+- Breaking schema change → new topic version (`.v2`). Both versions live ≥30 days.
+- All consumers must deduplicate on `eventId` (see `docs/patterns/`).
+
+## Multi-Tenancy (remove section if not applicable)
+
+```typescript
+// ❌ missing tenant scope
+db.order.findMany({ where: { userId } });
+
+// ✅ always include tenantId — from ctx, never from global state
+db.order.findMany({ where: { userId, tenantId: ctx.tenantId } });
+```

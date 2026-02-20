@@ -1,0 +1,68 @@
+---
+description: Security — auth, input validation, secrets, PII, headers
+globs: ["services/**/*", "apps/**/*"]
+alwaysApply: true
+---
+
+# Security Guardrails
+
+## Auth (every protected endpoint)
+
+```typescript
+router.use(authMiddleware); // validate JWT; inject ctx.userId, ctx.tenantId, ctx.roles
+
+// After fetching a resource, always verify ownership
+if (order.userId !== ctx.userId) throw new ForbiddenError('FORBIDDEN');
+```
+
+## Input Validation (every external boundary — no exceptions)
+
+```typescript
+// Validate before touching business logic — return 422 on failure
+const result = CreateOrderSchema.safeParse(req.body);
+if (!result.success) return res.status(422).json({ error: { code: 'VALIDATION_ERROR', details: result.error } });
+// use result.data — typed and safe
+```
+
+## Injection Prevention
+
+```typescript
+// ❌ string interpolation in SQL
+db.query(`WHERE id = '${id}'`);
+// ✅ parameterized only
+db.query('WHERE id = $1', [id]);
+```
+
+## Secrets
+
+```typescript
+// ❌ hardcoded anywhere / committed in .env
+// ✅ process.env.SECRET_KEY — injected by platform (Vault / Secrets Manager / K8s secret)
+// .env must be in .gitignore
+```
+
+## Never Log (hard block)
+
+Passwords · tokens · card numbers (PAN/CVV) · SSNs · bank accounts · private keys · `apiKey` / `secret` fields
+
+```typescript
+// ✅ log type and amount — never raw card data
+logger.info('Payment processed', { orderId, paymentMethod: 'credit_card', amount });
+```
+
+## Headers & Rate Limiting (HTTP services)
+
+```typescript
+app.use(helmet());                                              // HSTS, CSP, X-Frame-Options
+app.use(cors({ origin: process.env.ALLOWED_ORIGINS?.split(',') })); // never wildcard in prod
+app.use('/api', rateLimit({ windowMs: 60_000, max: 100, standardHeaders: true }));
+// Differentiate limits per route type if needed: writes = 20/min, reads = 200/min
+```
+
+## Audit Log (auth events · data mutations · admin actions)
+
+```typescript
+auditLog({ action: 'order.created', actor: { userId: ctx.userId },
+  resource: { type: 'order', id: order.id }, outcome: 'success',
+  ip: req.ip, correlationId: ctx.correlationId, timestamp: new Date().toISOString() });
+```

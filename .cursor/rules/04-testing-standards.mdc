@@ -1,0 +1,82 @@
+---
+description: Testing structure, coverage gates, factory pattern
+globs: ["services/**/*", "apps/**/*", "shared/**/*"]
+alwaysApply: true
+---
+
+# Testing Standards
+
+## Coverage Gate: 80% unit (CI blocks merge below this)
+
+| Type        | Requirement              |
+|------------|--------------------------|
+| Unit        | ≥80% line/branch per service |
+| Integration | All new API endpoints (happy + error path) |
+| E2E         | Critical user flows only |
+
+## Structure
+
+- Colocate test next to source: `order.service.ts` → `order.service.test.ts`
+- No tests in a separate `__tests__/` top-level folder
+
+## AAA Pattern (required)
+
+```typescript
+describe('CreateOrderUseCase / when item is out of stock', () => {
+  it('should throw InsufficientStockError and not save the order', async () => {
+    // Arrange
+    const deps = buildDeps({ inventory: { inStock: false } });
+    // Act & Assert
+    await expect(new CreateOrderUseCase(deps).execute(buildCmd()))
+      .rejects.toThrow(InsufficientStockError);
+    expect(deps.orderRepo.save).not.toHaveBeenCalled();
+  });
+});
+```
+
+## Hard Rules
+
+```typescript
+// ❌ conditional logic in assertions → ✅ deterministic expect() calls
+// ❌ hardcoded UUIDs → ✅ faker.string.uuid() in factory
+// ❌ production data → ✅ factories only
+// ❌ shared mutable DB state between tests → ✅ TRUNCATE in afterEach
+// ❌ staging/prod DB in tests → ✅ testcontainers or local test DB
+```
+
+## Factory Pattern (required for all domain objects)
+
+```typescript
+export function buildOrder(overrides: Partial<Order> = {}): Order {
+  return { id: faker.string.uuid(), status: 'PENDING', ...overrides };
+}
+```
+
+## Integration Tests (real HTTP stack)
+
+```typescript
+// Test both paths for every new endpoint
+it('POST /v1/orders — 201 on valid input', async () => {
+  const res = await request(app).post('/v1/orders')
+    .set('Authorization', `Bearer ${token}`).send(buildOrderPayload());
+  expect(res.status).toBe(201);
+  expect(res.body.data.id).toBeDefined();
+});
+
+it('POST /v1/orders — 422 when items is empty', async () => {
+  const res = await request(app).post('/v1/orders')
+    .set('Authorization', `Bearer ${token}`).send({ items: [] });
+  expect(res.status).toBe(422);
+  expect(res.body.error.code).toBe('VALIDATION_ERROR');
+});
+```
+
+## What to Test
+
+| Layer           | Type        | Focus                                   |
+|----------------|-------------|-----------------------------------------|
+| Domain entities | Unit        | Business rules, invariants              |
+| Use cases       | Unit        | Orchestration, all error paths          |
+| HTTP handlers   | Integration | Auth, request parsing, response shape   |
+| Repositories    | Integration | Queries, transactions, tenant scoping   |
+| Event consumers | Unit        | Idempotency, error paths, compensation  |

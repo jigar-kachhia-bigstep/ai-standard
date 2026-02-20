@@ -1,0 +1,54 @@
+---
+description: Coding standards — naming, prohibited patterns, dependencies
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Coding Standards
+
+## Naming
+
+| Thing               | Convention       | Example                       |
+|--------------------|-----------------|-------------------------------|
+| Files               | kebab-case      | `user-service.ts`             |
+| Classes / Types     | PascalCase      | `OrderService`                |
+| Functions / Vars    | camelCase       | `createOrder`                 |
+| Constants           | SCREAMING_SNAKE | `MAX_RETRY_COUNT`             |
+| DB tables           | snake_case      | `order_items`                 |
+| Env vars            | SCREAMING_SNAKE | `DATABASE_URL`                |
+| API routes          | plural nouns    | `/orders`, `/payment-methods` |
+| Event topics        | `domain.agg.event.vN` | `commerce.order.created.v1` |
+
+## Hard Blocks
+
+```typescript
+// ❌ hardcoded secret → ✅ process.env.API_KEY (fail fast if missing)
+// ❌ console.log     → ✅ logger.info('msg', { correlationId, ...fields })
+// ❌ any type        → ✅ unknown + type narrowing
+// ❌ SELECT *        → ✅ SELECT id, status, total FROM ...
+// ❌ commented-out code or TODO in merged PR → delete it or file a ticket
+// ❌ sync blocking I/O in hot paths → use async I/O
+```
+
+## Required
+
+```typescript
+// Structured logging — correlationId required on every log
+logger.info('Order created', { correlationId: ctx.correlationId, orderId });
+
+// Explicit return types on all public functions
+async function createOrder(cmd: CreateOrderCommand): Promise<Order> { ... }
+
+// Env config — fail fast if required value is missing
+const dbUrl = process.env.DATABASE_URL;
+if (!dbUrl) throw new Error('DATABASE_URL is required');
+```
+
+## Files
+
+- One responsibility per file. Name it after what it does (not `utils.ts`, `helpers.go`).
+- Colocate test file in same directory: `order.service.ts` → `order.service.test.ts`
+
+## Dependencies
+
+New external package: entry in `governance/decision-records/` (rationale + license check + `npm audit` zero criticals). Pin exact version — no `^` or `~` in production.

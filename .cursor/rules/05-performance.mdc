@@ -1,0 +1,80 @@
+---
+description: Performance — queries, caching, async, connections
+globs: ["services/**/*", "apps/**/*"]
+alwaysApply: true
+---
+
+# Performance Rules
+
+## Queries
+
+```typescript
+// ❌ N+1 — loop with per-item query
+for (const order of orders) { await db.orderItem.findMany({ where: { orderId: order.id } }); }
+// ✅ eager load or batch
+const orders = await db.order.findMany({ where: { userId }, include: { items: true } });
+```
+
+```typescript
+// ❌ unbounded list → ✅ always paginate
+// Default 20, max 100. Cursor-based. Return { data, meta: { nextCursor, hasMore } }
+const rows = await db.order.findMany({ where: { userId }, take: limit,
+  cursor: cursor ? { id: cursor } : undefined, orderBy: { createdAt: 'desc' } });
+```
+
+```sql
+-- ❌ CREATE INDEX ON orders(user_id);      ← locks table
+-- ✅ CREATE INDEX CONCURRENTLY ON orders(user_id);
+```
+
+## Caching (TTL defaults from CLAUDE.md — use them)
+
+```typescript
+// Read-through pattern
+async function getProduct(id: string, ctx: Ctx): Promise<Product> {
+  const key = `t:${ctx.tenantId}:product:${id}`; // always tenant-scoped
+  const hit = await redis.get(key);
+  if (hit) return JSON.parse(hit);
+  const product = await db.product.findUnique({ where: { id } });
+  await redis.setex(key, 300, JSON.stringify(product));
+  return product;
+}
+
+// Invalidate on write — if del() fails, log WARN and let TTL expire (accept brief staleness)
+await db.product.update({ where: { id }, data });
+await redis.del(`t:${ctx.tenantId}:product:${id}`).catch(e => logger.warn('Cache del failed', e));
+```
+
+## Async
+
+```typescript
+// ❌ sequential awaits for independent work
+const user = await getUser(id);
+const prefs = await getPrefs(id); // unnecessary wait
+// ✅
+const [user, prefs] = await Promise.all([getUser(id), getPrefs(id)]);
+
+// ❌ CPU-heavy sync work on event loop → ✅ offload to worker thread or job queue
+```
+
+## Connections & Outbound Calls
+
+```typescript
+// Explicit pool size — never rely on defaults
+const pool = new Pool({ max: 10, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 2_000 });
+
+// Timeout on every outbound HTTP call
+await fetch(url, { signal: AbortSignal.timeout(5_000) });
+
+// Circuit breaker on every downstream service dependency
+const result = await circuitBreaker.fire(downstreamCall);
+```
+
+## Frontend
+
+```tsx
+// ❌ spinner for content areas → ✅ skeleton screens
+// ❌ sort/filter inside render → ✅ useMemo
+// ❌ render all N items → ✅ virtualize lists >50 items
+// ❌ eager-load all components → ✅ lazy() + Suspense for below-fold
+```

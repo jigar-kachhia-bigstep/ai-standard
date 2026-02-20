@@ -1,0 +1,24 @@
+{
+  "rules": {
+    "enabled": true,
+    "rulesDirectory": ".cursor/rules",
+    "alwaysApply": ["01-coding-standards.mdc"]
+  },
+  "ai": {
+    "contextFiles": [
+      "CLAUDE.md",
+      "AGENTS.md"
+    ],
+    "alwaysInclude": ["CLAUDE.md"]
+  },
+  "ignore": [
+    "node_modules",
+    "dist",
+    "build",
+    ".next",
+    "coverage",
+    "*.generated.*",
+    "*.pb.go",
+    "*.pb.ts"
+  ]
+}

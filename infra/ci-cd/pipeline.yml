@@ -1,0 +1,91 @@
+# CI/CD Pipeline — Compound Engineering Template
+# Adapt for your CI system: GitHub Actions, GitLab CI, CircleCI, etc.
+
+# ─────────────────────────────────────────────────────────────────
+# STAGE 1: LINT
+# Run on every PR. Fast feedback on obvious issues.
+# ─────────────────────────────────────────────────────────────────
+lint:
+  steps:
+    - TypeScript / Go lint
+    - Type checking (no `any`)
+    - SQL migration lint (squawk or equivalent)
+    - Dockerfile lint (hadolint)
+    - IaC lint (terraform validate, helm lint)
+
+# ─────────────────────────────────────────────────────────────────
+# STAGE 2: SECURITY SCAN
+# Parallel with lint. Blocks on CRITICAL findings.
+# ─────────────────────────────────────────────────────────────────
+security-scan:
+  steps:
+    - SAST (Semgrep with OWASP ruleset)
+    - Dependency audit (npm audit / go mod verify)
+    - IaC security scan (Checkov / tfsec)
+    - Secret detection (detect-secrets / truffleHog)
+
+# ─────────────────────────────────────────────────────────────────
+# STAGE 3: TEST
+# Parallel per service. Coverage gate: 80% minimum.
+# ─────────────────────────────────────────────────────────────────
+test:
+  matrix: [cart-service, order-service, payment-service, catalog-service, notification-service]
+  steps:
+    - Start test dependencies (PostgreSQL, Redis via Docker)
+    - Run migrations on test database
+    - Run unit + integration tests
+    - Assert coverage ≥ 80%
+    - Upload coverage report
+
+# ─────────────────────────────────────────────────────────────────
+# STAGE 4: CONTRACT TESTS (if using consumer-driven contracts)
+# ─────────────────────────────────────────────────────────────────
+contract-tests:
+  steps:
+    - Run Pact consumer tests
+    - Verify provider contracts
+    - Publish pacts to Pact Broker
+
+# ─────────────────────────────────────────────────────────────────
+# STAGE 5: BUILD
+# Only on merge to main. Builds Docker images.
+# ─────────────────────────────────────────────────────────────────
+build:
+  trigger: push to main
+  steps:
+    - Build Docker image (multi-stage, non-root user)
+    - Push to container registry (tagged with git SHA)
+    - Trivy container scan (block on CRITICAL CVEs)
+
+# ─────────────────────────────────────────────────────────────────
+# STAGE 6: DEPLOY TO STAGING
+# GitOps: update image tags → ArgoCD syncs automatically
+# ─────────────────────────────────────────────────────────────────
+deploy-staging:
+  trigger: after build
+  steps:
+    - Update image tags in Helm values (staging)
+    - Wait for ArgoCD to sync
+    - Run smoke tests against staging
+    - Run E2E tests (Playwright or Cypress)
+
+# ─────────────────────────────────────────────────────────────────
+# STAGE 7: DEPLOY TO PRODUCTION
+# Manual approval gate → canary → progressive rollout
+# ─────────────────────────────────────────────────────────────────
+deploy-production:
+  trigger: manual approval after staging passes
+  steps:
+    - Update image tags in Helm values (production)
+    - ArgoCD syncs to canary (5% traffic)
+    - Monitor canary: error rate, latency for 10 minutes
+    - Auto-promote to 25% → 50% → 100% if metrics pass
+    - Auto-rollback if error rate > 1% vs baseline
+
+# ─────────────────────────────────────────────────────────────────
+# AUTO-ROLLBACK CRITERIA
+# ─────────────────────────────────────────────────────────────────
+rollback-triggers:
+  - error_rate > 1% for 5 consecutive minutes
+  - p99_latency > 2x baseline for 5 consecutive minutes
+  - health_check_failures > 10% of pods

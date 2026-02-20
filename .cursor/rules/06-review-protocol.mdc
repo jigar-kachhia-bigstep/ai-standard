@@ -1,0 +1,81 @@
+---
+description: Review verdicts, checklist, and output format
+globs: ["docs/reviews/**/*"]
+alwaysApply: false
+---
+
+# Review Protocol
+
+## Verdicts
+
+| Verdict                  | Meaning                                                 |
+|--------------------------|---------------------------------------------------------|
+| `APPROVED`               | All checklist items pass. Ready to merge.               |
+| `APPROVED_WITH_COMMENTS` | Minor issues only. Merge after acknowledging.           |
+| `CHANGES_REQUIRED`       | Blocking issue(s). Fix before merge. File:line required.|
+
+## Checklist (verify every item — do not assume)
+
+**Correctness**
+- [ ] Implements what the approved plan described — not more, not less
+- [ ] Edge cases covered (empty, null, zero, max)
+
+**Architecture** (rules in `.cursor/rules/02`)
+- [ ] No cross-service DB access · shared code in `shared/` only
+- [ ] API responses use the standard envelope (see CLAUDE.md)
+- [ ] New dependencies have ADR entry
+
+**Security** (rules in `.cursor/rules/03`)
+- [ ] All external input validated · auth check before data access
+- [ ] No PII / secrets / tokens in logs · SQL parameterized
+
+**Testing** (rules in `.cursor/rules/04`)
+- [ ] Unit coverage ≥80% · integration tests on all new endpoints
+- [ ] Error paths tested · factories used (no hardcoded IDs)
+
+**Observability**
+- [ ] Structured logs with `correlationId` on all new functions
+- [ ] Spans on all functions crossing service boundaries
+
+**Performance** (rules in `.cursor/rules/05`)
+- [ ] No N+1 · all lists paginated · cache invalidated on mutation
+
+**Operations**
+- [ ] Config from env vars · health check still passes
+- [ ] DB migration: `CONCURRENTLY` index · rollback script present
+
+## Blocking Issue Format
+
+```
+#### BLOCK-{N} — {title}
+**Severity**: CRITICAL | HIGH | MEDIUM
+**File**: path/to/file.ts:{line}
+**Found**: {exact problematic code}
+**Required**: {correct pattern}
+**Rationale**: {rule reference + why it matters}
+```
+
+## Review Output (`docs/reviews/{FEAT-ID}-review.md`)
+
+```markdown
+# Review: {FEAT-ID} — {Name}
+**Verdict**: APPROVED | APPROVED_WITH_COMMENTS | CHANGES_REQUIRED
+**Date / PR**: {date} / #{pr}
+
+## Summary
+{2-3 sentences}
+
+## Blocking Issues
+{BLOCK-N entries or "None"}
+
+## Checklist
+| Area          | Result | Notes |
+|--------------|--------|-------|
+| Correctness  | ✅/❌  |       |
+| Architecture | ✅/❌  |       |
+| Security     | ✅/❌  |       |
+| Testing      | ✅/❌  |       |
+| Observability| ✅/❌  |       |
+| Performance  | ✅/❌  |       |
+| Operations   | ✅/❌  |       |
+```
