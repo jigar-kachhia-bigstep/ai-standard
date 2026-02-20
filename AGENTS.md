@@ -8,24 +8,27 @@
 ## The Loop
 
 ```
-Human request
+Human request (structured or natural language)
       │
       ▼
-  [PLANNER] ──── docs/plans/{FEAT-ID}.md ────► Human approval
-                                                      │
-                                                      ▼
-                                               [WORKER(S)] ──── code + tests
-                                                      │
-                                                      ▼
-                                               [REVIEWER] ──── docs/reviews/{FEAT-ID}.md
-                                                      │
-                                         ┌────────────┴────────────┐
-                                    APPROVED                 CHANGES_REQUIRED
-                                         │                         │
-                                    Human merges             back to WORKER
-                                         │
-                                         ▼
-                                  [COMPOUND AGENT] ──── patterns + ADRs + CLAUDE.md updates
+  [PLANNER: Intake] ──── Intake Summary ────► Human confirms (or corrects)
+      │
+      ▼ (confirmed)
+  [PLANNER: Plan] ──── docs/plans/{FEAT-ID}.md ────► Human approval
+                                                            │
+                                                            ▼
+                                                     [WORKER(S)] ──── code + tests
+                                                            │
+                                                            ▼
+                                                     [REVIEWER] ──── docs/reviews/{FEAT-ID}.md
+                                                            │
+                                               ┌────────────┴────────────┐
+                                          APPROVED                 CHANGES_REQUIRED
+                                               │                         │
+                                          Human merges             back to WORKER
+                                               │
+                                               ▼
+                                        [COMPOUND AGENT] ──── patterns + ADRs + CLAUDE.md updates
 ```
 
 ---
@@ -40,13 +43,51 @@ above shows the flow — it does not describe automation.
 
 | Checkpoint | Who approves | What they check | What happens next |
 |------------|-------------|-----------------|-------------------|
-| After PLANNER | Human | Plan is correct, complete, and safe to build | Human manually invokes WORKER with the plan path |
+| After PLANNER Intake | Human | Extracted intent, scope, and services are correct | Human replies CONFIRM (or corrects) — PLANNER writes the full plan doc |
+| After PLANNER Plan | Human | Plan is correct, complete, and safe to build | Human manually invokes WORKER with the plan path |
 | After REVIEWER verdict APPROVED | Human | Review checklist passed, no open issues | Human merges the PR, then manually invokes COMPOUND AGENT |
 | After REVIEWER verdict CHANGES_REQUIRED | Human | Understands the issues | Human manually sends WORKER back with the review doc |
 | After COMPOUND AGENT | Human | ADRs and patterns are accurate | Human signs off — loop is done |
 
 > Nothing runs automatically. After approval, you manually invoke the next agent
 > using the prompts in `docs/how-to-prompt.md`.
+
+---
+
+## Natural Language Intake
+
+The PLANNER accepts both structured prompts and plain English descriptions.
+When the input is unstructured, the PLANNER **must not write the plan doc yet**.
+It must first produce an **Intake Summary** and wait for explicit human confirmation.
+
+### Intake Summary format
+
+```markdown
+## Intake Summary — Confirm Before I Plan
+
+**I heard**: {1–2 sentence restatement of the request in plain terms}
+
+**Feature ID**: FEAT-{next available ID}
+**Problem**: {extracted problem statement}
+**Success looks like**: {extracted or inferred measurable outcome}
+**Affected services**: {inferred service names}
+**Constraints identified**: {inferred compliance/performance/deadline — or "None detected — please confirm"}
+**Out of scope (assumed)**: {inferred exclusions — or "None assumed — please specify"}
+**Open questions**: {any ambiguities that would block planning}
+
+**Complexity estimate**: S / M / L / XL — {one-sentence justification}
+
+---
+Reply **CONFIRM** to generate the full plan, or correct any field above before I proceed.
+```
+
+### Rules
+
+- If input confidence is **CERTAIN (>95%)** on all fields → produce Intake Summary, wait for CONFIRM.
+- If any field is **UNCLEAR (<80%)** → list specific questions inside the Intake Summary under "Open questions". Do not guess.
+- Never skip the Intake Summary for natural language input, even if the request seems simple.
+- After the human replies CONFIRM (with or without corrections), apply corrections, then write `docs/plans/{FEAT-ID}-{slug}.md` using the plan template.
+- If the human provides a fully structured PLANNER prompt (all fields present), skip the Intake Summary and proceed directly to writing the plan doc.
 
 ---
 
@@ -80,10 +121,18 @@ Context loading order:
   3. docs/patterns/ (reusable patterns)
   4. governance/domain-boundaries.md (ownership + flows)
 
-Before writing the plan:
-  - Restate the request in your own words.
+Step 1 — Intake (always first):
+  - Determine whether the input is structured (all PLANNER fields present) or
+    natural language / unstructured.
+  - If unstructured: produce an Intake Summary (see AGENTS.md#natural-language-intake)
+    and STOP. Do not write the plan doc until the human replies CONFIRM.
+  - If structured: skip Intake Summary, proceed directly to Step 2.
+
+Step 2 — Plan (only after confirmed intent):
+  - Restate the confirmed request in your own words.
   - List your assumptions about scope, services affected, and constraints.
   - Identify the top 3 risks (security, performance, data consistency).
+  - Apply any corrections the human made during the Intake step.
 
 Write docs/plans/{FEAT-ID}-{slug}.md using the plan template.
 Your output must answer: why, what services/data/APIs change, what events emit,

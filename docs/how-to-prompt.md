@@ -18,7 +18,61 @@
 
 ---
 
+## Natural Language Entry (No Structure Required)
+
+You don't need to fill in the full PLANNER template to start. You can describe the
+feature in plain English and the PLANNER will extract a structured **Intake Summary**
+for you to confirm before any planning begins.
+
+**Example — plain English input:**
+```
+I want users to be able to save items for later from their cart.
+The save-for-later list should persist across sessions and devices.
+We probably need a new table or something. Not sure yet.
+```
+
+**What the PLANNER produces — Intake Summary:**
+```markdown
+## Intake Summary — Confirm Before I Plan
+
+**I heard**: Users should be able to move cart items to a persistent "saved for later"
+list that survives across sessions and devices.
+
+**Feature ID**: FEAT-012
+**Problem**: Cart items are ephemeral (Redis). Users lose items when their session
+expires and have no way to bookmark products without purchasing.
+**Success looks like**: A user can save an item from cart, log out, log back in on a
+different device, and see the same saved items.
+**Affected services**: cart-service (read cart), catalog-service (validate item exists),
+new saved-items table in order-service or a new service TBD
+**Constraints identified**: None detected — please confirm (GDPR? PII implications if
+saved list is tied to userId?)
+**Out of scope (assumed)**: Sharing saved lists with other users, email reminders for
+saved items
+**Open questions**:
+  1. Should saved items survive account deletion? (data retention policy)
+  2. Is there a max saved items limit?
+  3. Which service owns the saved-items data — order-service or a new service?
+
+**Complexity estimate**: M — requires new persistence layer and cross-service reads,
+but no payment or compliance scope.
+
+---
+Reply **CONFIRM** to generate the full plan, or correct any field above before I proceed.
+```
+
+**After you reply CONFIRM** (or correct any field), the PLANNER writes the full
+`docs/plans/FEAT-012-saved-for-later.md` and waits for your plan approval.
+
+> The Intake step is a one-round clarification gate. It prevents the PLANNER from
+> writing a 300-line plan based on a wrong assumption.
+
+---
+
 ## Prompting a PLANNER
+
+Use this structured format when you already know the scope clearly. The PLANNER
+skips the Intake Summary and writes the plan doc directly.
 
 ```
 Create plan for FEAT-{ID}: {feature name in 5 words}.
@@ -37,6 +91,8 @@ Out of scope:
 Open questions I already know about:
 - {?}
 ```
+
+> If you're not sure about scope yet, skip this template and use **Natural Language Entry** above instead.
 
 ---
 
